@@ -2,6 +2,8 @@
 
 An interactive geometry learning app built with React. Explore geometric concepts through engaging levels, earn stickers, and master shapes in a fun educational experience.
 
+**Published on [skolappar.com](https://www.skolappar.com) - Democratizing learning apps, built by vibe-coding parents who love helping their kids learn!**
+
 ## Features
 
 - **Level-based Learning**: Progressive difficulty with multiple geometry levels
