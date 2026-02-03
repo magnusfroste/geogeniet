@@ -1,20 +1,61 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# GeoGeniet 🔷
 
-# Run and deploy your AI Studio app
+An interactive geometry learning app built with React. Explore geometric concepts through engaging levels, earn stickers, and master shapes in a fun educational experience.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1rkwzZ5ca1BiVjbXhLrCEd3h1mmhZVpB2
+- **Level-based Learning**: Progressive difficulty with multiple geometry levels
+- **Interactive Gameplay**: Hands-on geometric problem solving
+- **Sticker Collection**: Earn stickers as rewards for completing levels
+- **Star Rating System**: 1-3 star ratings based on performance
+- **Challenge Mode**: Test your skills with advanced challenges
+- **Particle Effects**: Visual feedback and celebrations
+- **Audio Feedback**: Sound effects for interactions
+- **Progress Saving**: Auto-save your progress locally
+- **Responsive Design**: Works on desktop and mobile
 
-## Run Locally
+## Getting Started
 
-**Prerequisites:**  Node.js
+### Prerequisites
 
+- Node.js (v18 or higher)
+- npm or yarn
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Installation
+
+```bash
+npm install
+```
+
+### Run Locally
+
+```bash
+npm run dev
+```
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+## How to Play
+
+1. Start with the intro screen to learn the basics
+2. Select a level from the level map
+3. Solve geometry problems to earn stars
+4. Collect stickers for your achievements
+5. Unlock new levels as you progress
+6. Try challenge mode for advanced practice
+
+## Tech Stack
+
+- **React 19** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **Lucide React** - Icons
+- **Web Audio API** - Sound effects
+
+## License
+
+MIT
