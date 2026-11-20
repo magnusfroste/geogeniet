@@ -1,1 +1,23 @@
-{"name": "Geogeniet", "short_name": "Geogeniet", "description": "Geogeniet är ett kostnadsfritt geometrispel för barn: hjälp roboten Geo att samla former genom att dra och släppa, nivå för nivå. Tränar former, färger och logik. Fungerar på iPad, mobil och dator utan inloggning.", "start_url": "/", "display": "standalone", "background_color": "#1d4ed8", "theme_color": "#1d4ed8", "icons": [{"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}, {"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]}
+{
+  "name": "Geogeniet",
+  "short_name": "Geogeniet",
+  "description": "Geogeniet är ett kostnadsfritt geometrispel för barn: hjälp roboten Geo att samla former genom att dra och släppa, nivå för nivå. Tränar former, färger och logik. Fungerar på iPad, mobil och dator utan inloggning.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1d4ed8",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "scope": "/",
+  "lang": "sv"
+}
