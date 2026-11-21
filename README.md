@@ -1,63 +1,70 @@
-# GeoGeniet 🔷
+# Geogeniet
 
-An interactive geometry learning app built with React. Explore geometric concepts through engaging levels, earn stickers, and master shapes in a fun educational experience.
+Ett geometrispel för förskolan och lågstadiet. Barnet hjälper roboten Geo att bygga bilder genom
+att dra former – cirklar, trianglar, sexhörningar, stjärnor och fler – till rätt plats, nivå för
+nivå. Tränar former, färger och rumsuppfattning.
 
-**Published on [skolappar.com](https://www.skolappar.com) - Democratizing learning apps, built by vibe-coding parents who love helping their kids learn!**
+**Spela:** https://geogeniet.skolappar.com · En del av [Skolappar](https://www.skolappar.com) – pedagogiska appar av föräldrar · öppen källkod (MIT)
 
-## Features
+![Geogeniet](public/kort.png)
 
-- **Level-based Learning**: Progressive difficulty with multiple geometry levels
-- **Interactive Gameplay**: Hands-on geometric problem solving
-- **Sticker Collection**: Earn stickers as rewards for completing levels
-- **Star Rating System**: 1-3 star ratings based on performance
-- **Challenge Mode**: Test your skills with advanced challenges
-- **Particle Effects**: Visual feedback and celebrations
-- **Audio Feedback**: Sound effects for interactions
-- **Progress Saving**: Auto-save your progress locally
-- **Responsive Design**: Works on desktop and mobile
+Började som ett Google AI Studio-projekt och körs nu fristående.
 
-## Getting Started
+## Vad du kan göra
 
-### Prerequisites
+- **37 nivåer** på en karta, från Starten och Trianglar till Raketen, Slottet och Ankaret.
+  Nivåerna låses upp med stjärnor.
+- **Dra och släpp** formerna med fingret eller musen; de fastnar när de hamnar rätt.
+- **Ledtråd**: visar var en form ska ligga (ny ledtråd efter fem sekunder).
+- **Stjärnor**: tre stjärnor första gången en nivå klaras.
+- **Utmaningsläge** med nedräkning (fem sekunder per form plus 15) och en bonusstjärna om du
+  hinner.
+- **Klistermärkesbok**: sex klistermärken som låses upp vid 5, 15, 30, 45, 60 och 75 stjärnor.
+- **Information för pedagoger och föräldrar** i en egen ruta.
+- Ljudeffekter skapas i webbläsaren (Web Audio) och kan stängas av.
 
-- Node.js (v18 or higher)
-- npm or yarn
-
-### Installation
+## Kom igång
 
 ```bash
 npm install
+npm run dev      # utvecklingsserver på port 3000
+npm run build    # produktionsbygge till dist/
+npm run preview  # förhandsgranska bygget
 ```
 
-### Run Locally
+Docker-bygget använder Node 22.
+
+## Docker
 
 ```bash
-npm run dev
+docker build -t geogeniet .
+docker run --rm -p 8080:8080 geogeniet
 ```
 
-### Build for Production
+Servern ligger bakom nginx med `deploy/nginx.conf`.
 
-```bash
-npm run build
+## Integritet
+
+- Ingen inloggning, inga kakor, ingen analys, inga AI-tjänster.
+- Inga anrop till externa servrar. Typsnittet Fredoka ligger i `public/fonts/`.
+- Framsteg (stjärnor, klarade nivåer, utmaningsläge) sparas i `localStorage` under
+  `geogeniet-save-v1`, och att introt är visat under `geogeniet-intro-seen-v1`.
+
+## Struktur
+
+```
+App.tsx                      spelläge, stjärnor, vinstruta, sparning
+constants.ts                 nivåer och klistermärken
+audio.ts                     ljudeffekter och bakgrundsmusik
+components/LevelMap.tsx      nivåkartan, ljud av/på, utmaningsläge
+components/GameBoard.tsx     dra och släpp, ledtråd, nedräkning
+components/ShapeRender.tsx   ritar formerna som SVG
+components/StickerBook.tsx   klistermärkesboken
+components/InfoModal.tsx     information för vuxna
+components/IntroScreen.tsx   intro med Geo
+deploy/nginx.conf            nginx-konfiguration
 ```
 
-## How to Play
+## Licens
 
-1. Start with the intro screen to learn the basics
-2. Select a level from the level map
-3. Solve geometry problems to earn stars
-4. Collect stickers for your achievements
-5. Unlock new levels as you progress
-6. Try challenge mode for advanced practice
-
-## Tech Stack
-
-- **React 19** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool
-- **Lucide React** - Icons
-- **Web Audio API** - Sound effects
-
-## License
-
-MIT
+MIT – se [LICENSE](LICENSE).
