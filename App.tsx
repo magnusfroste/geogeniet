@@ -10,6 +10,7 @@ import { StickerBook } from './components/StickerBook';
 import { InfoModal } from './components/InfoModal';
 import { Star, ArrowRight, Menu, Plus } from 'lucide-react';
 import { playVictory, initAudio, playClick } from './audio';
+import { report } from './skolappar';
 
 const STORAGE_KEY = 'geogeniet-save-v1';
 const INTRO_SEEN_KEY = 'geogeniet-intro-seen-v1';
@@ -216,7 +217,7 @@ export default function App() {
           gameState={gameState} 
           onSelectLevel={handleLevelSelect} 
           isMuted={isMuted}
-          onToggleMute={() => setIsMuted(prev => !prev)}
+          onToggleMute={() => { if (!isMuted) report('sound_off'); setIsMuted(prev => !prev); }}
           onOpenStickers={() => setGameState(prev => ({ ...prev, viewingStickers: true }))}
           onOpenInfo={() => setGameState(prev => ({ ...prev, viewingInfo: true }))}
           onToggleChallengeMode={toggleChallengeMode}
