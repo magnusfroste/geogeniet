@@ -38,9 +38,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
   const timerRef = useRef<number | null>(null);
   // Report each round's result once (the victory effect can run again on re-render)
   const roundReportedRef = useRef(false);
+  // A level is completed once: App re-renders after onComplete with a new onComplete, which ran the
+  // victory effect again – the victory sound every half second and bonus stars without end.
+  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const reportRoundStart = () => {
     roundReportedRef.current = false;
+    completedRef.current = false;
     report('round_start');
     report('level', level.id);
   };
@@ -94,14 +100,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
         roundReportedRef.current = true;
         report('round_done', 100);
       }
+      if (completedRef.current) return;
+      completedRef.current = true;
       // Slight delay for satisfaction
       setTimeout(() => {
           // Bonus star if challenge mode active and not game over
           const bonus = challengeMode ? 1 : 0;
-          onComplete(bonus);
-      }, 500); 
+          onCompleteRef.current(bonus);
+      }, 500);
     }
-  }, [lockedPieceIds, pieces, onComplete, challengeMode]);
+  }, [lockedPieceIds, pieces, challengeMode]);
 
   // Time ran out in challenge mode: the result is the share of shapes placed
   useEffect(() => {
