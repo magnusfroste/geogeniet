@@ -4,6 +4,7 @@ import { LevelData, GameShape, Position, AudioTheme } from '../types';
 import { ShapeRender } from './ShapeRender';
 import { RotateCcw, Home, Lightbulb, Clock, AlertTriangle, Sparkles, Star } from 'lucide-react';
 import { playSnap, playClick, playPickUp, playDragMove, playBackgroundMusic } from '../audio';
+import { report } from '../skolappar';
 
 interface GameBoardProps {
   level: LevelData;
@@ -35,6 +36,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isGameOver, setIsGameOver] = useState(false);
   const timerRef = useRef<number | null>(null);
+  // Report each round's result once (the victory effect can run again on re-render)
+  const roundReportedRef = useRef(false);
+
+  const reportRoundStart = () => {
+    roundReportedRef.current = false;
+    report('round_start');
+    report('level', level.id);
+  };
 
   // Initialize level
   useEffect(() => {
@@ -48,6 +57,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
     setHintId(null);
     setHintCooldown(false);
     setIsGameOver(false);
+    reportRoundStart();
 
     // Initialize Timer
     if (challengeMode) {
@@ -80,6 +90,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
   useEffect(() => {
     if (pieces.length > 0 && lockedPieceIds.length === pieces.length) {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (!roundReportedRef.current) {
+        roundReportedRef.current = true;
+        report('round_done', 100);
+      }
       // Slight delay for satisfaction
       setTimeout(() => {
           // Bonus star if challenge mode active and not game over
@@ -88,6 +102,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
       }, 500); 
     }
   }, [lockedPieceIds, pieces, onComplete, challengeMode]);
+
+  // Time ran out in challenge mode: the result is the share of shapes placed
+  useEffect(() => {
+    if (isGameOver && pieces.length > 0 && !roundReportedRef.current) {
+      roundReportedRef.current = true;
+      report('round_done', Math.round((lockedPieceIds.length / pieces.length) * 100));
+    }
+  }, [isGameOver, lockedPieceIds.length, pieces.length]);
 
   // --- Theme Logic ---
   const theme = useMemo(() => {
@@ -180,6 +202,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
     const target = unplaced[Math.floor(Math.random() * unplaced.length)];
     
     playClick();
+    report('hint');
     setHintId(target.id);
     setHintCooldown(true);
 
@@ -204,6 +227,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
       setLockedPieceIds([]);
       setHintId(null);
       setIsGameOver(false);
+      reportRoundStart();
       
       if (challengeMode) {
           const calculatedTime = level.challengeTime || (level.shapes.length * 5 + 15);
