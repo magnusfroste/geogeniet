@@ -4,7 +4,7 @@ Ett geometrispel för förskolan och lågstadiet. Barnet hjälper roboten Geo at
 att dra former – cirklar, trianglar, sexhörningar, stjärnor och fler – till rätt plats, nivå för
 nivå. Tränar former, färger och rumsuppfattning.
 
-**Spela:** https://geogeniet.skolappar.com · En del av [Skolappar](https://www.skolappar.com) – pedagogiska appar av föräldrar · öppen källkod (MIT)
+**Spela:** https://geogeniet.skolappar.org · En del av [Skolappar](https://www.skolappar.org) – pedagogiska appar av föräldrar · öppen källkod (MIT)
 
 ![Geogeniet](public/kort.png)
 

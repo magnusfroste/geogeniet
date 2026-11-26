@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://geogeniet.skolappar.com/sitemap.xml
+Sitemap: https://geogeniet.skolappar.org/sitemap.xml
