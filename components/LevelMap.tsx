@@ -132,49 +132,114 @@ export const LevelMap: React.FC<LevelMapProps> = ({ levels, gameState, onSelectL
 };
 
   // --- Math for the Path ---
-  const NODE_SPACING = 100; // Vertical pixels between levels
-  const AMPLITUDE = 120; // Max horizontal distance from center (pixels)
-  const FREQUENCY = 0.8; // How tight the curves are
+  const NODE_SPACING = 112; // Vertical pixels between levels
+  const TOP_PAD = 150;
 
-  // Define "Worlds" for visual variety background
-  const getWorldColor = (levelIndex: number) => {
-      if (levelIndex < 5) return 'from-green-50 via-green-100 to-green-50'; // Grass
-      if (levelIndex < 10) return 'from-blue-50 via-blue-100 to-blue-50'; // Ice/Sky
-      if (levelIndex < 15) return 'from-orange-50 via-amber-100 to-orange-50'; // Construction/Sand
-      if (levelIndex < 20) return 'from-indigo-50 via-purple-100 to-indigo-50'; // Space/Night
-      if (levelIndex < 25) return 'from-pink-50 via-rose-100 to-pink-50'; // Candy
-      if (levelIndex < 30) return 'from-teal-50 via-cyan-100 to-teal-50'; // Ocean
-      return 'from-yellow-50 via-yellow-100 to-yellow-50'; // Gold/Royal
-  };
+  // Measured width so the trail can use the whole map on iPad and stay tidy on phones
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapWidth, setMapWidth] = useState(448);
+  useEffect(() => {
+      const el = mapRef.current;
+      if (!el) return;
+      const measure = () => {
+          const w = Math.round(el.getBoundingClientRect().width);
+          if (w > 0) setMapWidth(prev => (Math.abs(prev - Math.max(280, w)) < 1 ? prev : Math.max(280, w)));
+      };
+      measure();
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+  }, []);
 
-  // Pre-calculate positions
+  // Worlds: colour band + landscape props, five levels each
+  const WORLDS = [
+      { name: 'Ängen',     sky: '#f2fbf0', hill: '#cdeccb', deep: '#a9dda6', prop: 'tree'  },
+      { name: 'Bergen',    sky: '#f0f7ff', hill: '#cfe2f7', deep: '#aecbe8', prop: 'rock'  },
+      { name: 'Stranden',  sky: '#fff8ec', hill: '#f6e2bd', deep: '#eccf9b', prop: 'shell' },
+      { name: 'Rymden',    sky: '#f4f1ff', hill: '#ded4f7', deep: '#c3b3ea', prop: 'star'  },
+      { name: 'Godisland', sky: '#fff2f8', hill: '#fbd6e7', deep: '#f5b8d3', prop: 'candy' },
+      { name: 'Havet',     sky: '#eefcff', hill: '#c9eef5', deep: '#a5dfea', prop: 'wave'  },
+      { name: 'Slottet',   sky: '#fffceb', hill: '#f7eab0', deep: '#efd97e', prop: 'flag'  },
+  ];
+  const worldIndex = (i: number) => Math.min(WORLDS.length - 1, Math.floor(i / 5));
+
+  // The trail winds like a snake: two gentle waves added together, so no two
+  // bends look the same and the child always sees the next stone before it.
   const levelNodes = useMemo(() => {
+      const amp = Math.min(mapWidth * 0.30, 132);
       return levels.map((level, i) => {
-          const y = i * NODE_SPACING + 150; // Start with some padding
-          const xOffset = Math.sin(i * FREQUENCY) * AMPLITUDE;
+          const y = i * NODE_SPACING + TOP_PAD;
+          const wave = Math.sin(i * 0.82) * 0.78 + Math.sin(i * 0.41 + 1.3) * 0.22;
           return {
               ...level,
-              x: xOffset,
-              y: y,
-              worldColor: getWorldColor(i)
+              x: mapWidth / 2 + wave * amp,
+              y,
+              world: worldIndex(i),
           };
       });
-  }, [levels]);
+  }, [levels, mapWidth]);
 
-  const totalHeight = levelNodes.length * NODE_SPACING + 300;
+  const totalHeight = levelNodes.length * NODE_SPACING + 360;
 
-  // Generate SVG Path String
+  // Smooth trail through the stones (Catmull-Rom -> cubic Bézier)
   const pathData = useMemo(() => {
-      let d = `M 0 ${levelNodes[0].y}`;
-      for (let i = 0; i < levelNodes.length - 1; i++) {
-          const curr = levelNodes[i];
-          const next = levelNodes[i+1];
-          d += ` L ${next.x} ${next.y}`;
+      if (levelNodes.length === 0) return '';
+      const pts = levelNodes.map(n => ({ x: n.x, y: n.y }));
+      // Lead-in from above so the trail starts off-screen like a path coming from the forest
+      const first = pts[0];
+      const lead = { x: first.x, y: first.y - NODE_SPACING * 0.9 };
+      const all = [lead, ...pts];
+      let d = `M ${all[0].x.toFixed(1)} ${all[0].y.toFixed(1)}`;
+      for (let i = 0; i < all.length - 1; i++) {
+          const p0 = all[i - 1] || all[i];
+          const p1 = all[i];
+          const p2 = all[i + 1];
+          const p3 = all[i + 2] || p2;
+          const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+          const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+          d += ` C ${c1.x.toFixed(1)} ${c1.y.toFixed(1)}, ${c2.x.toFixed(1)} ${c2.y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
       }
       return d;
   }, [levelNodes]);
 
+  // Landscape: soft hills at every world change + small props beside the trail
+  const scenery = useMemo(() => {
+      const items: { key: string; left: number; top: number; size: number; kind: string; world: number; flip: boolean }[] = [];
+      for (let i = 0; i < levelNodes.length; i++) {
+          const w = levelNodes[i].world;
+          // Two props per level, one on each side of the trail, deterministic "random"
+          for (let k = 0; k < 2; k++) {
+              const seed = i * 7 + k * 13;
+              const r1 = ((seed * 9301 + 49297) % 233280) / 233280;
+              const r2 = ((seed * 4801 + 12345) % 233280) / 233280;
+              const side = k === 0 ? -1 : 1;
+              const node = levelNodes[i];
+              const left = node.x + side * (54 + r1 * Math.max(30, mapWidth * 0.16));
+              if (left < 18 || left > mapWidth - 18) continue;
+              items.push({
+                  key: `${i}-${k}`,
+                  left,
+                  top: node.y - 30 + r2 * 60,
+                  size: 22 + r1 * 18,
+                  kind: WORLDS[w].prop,
+                  world: w,
+                  flip: r2 > 0.5,
+              });
+          }
+      }
+      return items;
+  }, [levelNodes, mapWidth]);
 
+  const worldBands = useMemo(() => {
+      const bands: { world: number; top: number; height: number }[] = [];
+      for (let i = 0; i < levelNodes.length; i++) {
+          const w = levelNodes[i].world;
+          const last = bands[bands.length - 1];
+          if (last && last.world === w) last.height = levelNodes[i].y - last.top + NODE_SPACING;
+          else bands.push({ world: w, top: levelNodes[i].y - NODE_SPACING * 0.75, height: NODE_SPACING * 1.75 });
+      }
+      return bands;
+  }, [levelNodes]);
   return (
     <div className="h-screen bg-slate-50 flex flex-col items-center overflow-hidden relative">
         
@@ -223,69 +288,132 @@ export const LevelMap: React.FC<LevelMapProps> = ({ levels, gameState, onSelectL
 
         {/* Scrollable Map Area */}
         <div ref={scrollRef} className="flex-1 w-full overflow-y-auto overflow-x-hidden hide-scrollbar scroll-smooth">
-            <div 
-                className="relative w-full max-w-md mx-auto"
+            <div
+                ref={mapRef}
+                className="relative w-full max-w-md sm:max-w-xl mx-auto overflow-hidden"
                 style={{ height: totalHeight }}
             >
-                {/* Dynamic World Backgrounds using gradients blocks */}
-                <div className="absolute inset-0 z-0">
-                     <div className="w-full h-full bg-slate-50 opacity-50" 
-                          style={{ background: 'linear-gradient(to bottom, #f0fdf4 0%, #e0f2fe 30%, #fff7ed 60%, #f3e8ff 90%)' }} />
+                {/* World bands: soft sky + rolling hills */}
+                <div className="absolute inset-0 z-0 overflow-hidden">
+                    {worldBands.map((band, idx) => {
+                        const w = WORLDS[band.world];
+                        return (
+                            <div key={idx} className="absolute left-0 right-0" style={{ top: band.top, height: band.height }}>
+                                <div className="absolute inset-0" style={{ background: w.sky }} />
+                                <svg viewBox="0 0 400 120" preserveAspectRatio="none" className="absolute bottom-0 left-0 w-full" style={{ height: '55%' }}>
+                                    <path d="M0 120 L0 70 Q 60 30 130 62 Q 190 88 250 54 Q 320 20 400 66 L400 120 Z" fill={w.hill} opacity="0.85" />
+                                    <path d="M0 120 L0 96 Q 90 70 170 92 Q 250 112 330 88 Q 370 78 400 92 L400 120 Z" fill={w.deep} opacity="0.7" />
+                                </svg>
+                            </div>
+                        );
+                    })}
                 </div>
 
-                {/* The Path Line */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full z-0 pointer-events-none">
-                    <svg className="overflow-visible w-full h-full" style={{ left: '50%' }}>
-                        <path 
-                            d={pathData} 
-                            fill="none" 
-                            stroke="#cbd5e1" 
-                            strokeWidth="12" 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            className="drop-shadow-sm"
-                            style={{ transform: 'translateX(50%)' }} 
-                        />
-                        <path 
-                            d={pathData} 
-                            fill="none" 
-                            stroke="#fff" 
-                            strokeWidth="4" 
-                            strokeLinecap="round" 
-                            strokeDasharray="12 12"
-                            style={{ transform: 'translateX(50%)' }}
-                        />
+                {/* The trail */}
+                <div className="absolute inset-0 z-0 pointer-events-none">
+                    <svg
+                        width="100%"
+                        height={totalHeight}
+                        viewBox={`0 0 ${mapWidth} ${totalHeight}`}
+                        preserveAspectRatio="none"
+                        className="overflow-visible"
+                    >
+                        {/* sandy shoulder */}
+                        <path d={pathData} fill="none" stroke="#e7dcc6" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" opacity="0.55" />
+                        {/* the path itself */}
+                        <path d={pathData} fill="none" stroke="#f6efe1" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round" />
+                        {/* stepping dashes */}
+                        <path d={pathData} fill="none" stroke="#d9c9a8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="10 14" opacity="0.9" />
                     </svg>
                 </div>
+
+                {/* Small props beside the trail */}
+                {scenery.map(item => (
+                    <div
+                        key={item.key}
+                        className="absolute z-0 pointer-events-none"
+                        style={{
+                            left: item.left,
+                            top: item.top,
+                            width: item.size,
+                            height: item.size,
+                            transform: `translate(-50%, -50%) scaleX(${item.flip ? -1 : 1})`,
+                            opacity: 0.75,
+                        }}
+                    >
+                        {item.kind === 'tree' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <rect x="17" y="24" width="6" height="14" rx="2" fill="#a1714a" />
+                                <path d="M20 4 L33 24 H7 Z" fill="#7cbf73" />
+                                <path d="M20 12 L30 28 H10 Z" fill="#63ad59" />
+                            </svg>
+                        )}
+                        {item.kind === 'rock' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <path d="M6 30 Q 8 16 18 13 Q 30 10 34 24 Q 35 30 30 30 Z" fill="#b9c4cf" />
+                                <path d="M6 30 Q 8 22 14 20 Q 20 26 22 30 Z" fill="#9aa8b6" />
+                            </svg>
+                        )}
+                        {item.kind === 'shell' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <path d="M8 28 A 12 12 0 0 1 32 28 Z" fill="#f0b6a6" />
+                                <path d="M14 28 L20 18 L26 28 Z" fill="#e79b88" opacity="0.8" />
+                            </svg>
+                        )}
+                        {item.kind === 'star' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <path d="M20 5 L24 15 L35 16 L27 23 L29 34 L20 28 L11 34 L13 23 L5 16 L16 15 Z" fill="#c9bcf0" />
+                            </svg>
+                        )}
+                        {item.kind === 'candy' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <circle cx="20" cy="20" r="11" fill="#f7a8c8" />
+                                <path d="M9 20 A 11 11 0 0 1 20 9" stroke="#fff" strokeWidth="3" fill="none" />
+                                <path d="M31 20 A 11 11 0 0 1 20 31" stroke="#fff" strokeWidth="3" fill="none" />
+                            </svg>
+                        )}
+                        {item.kind === 'wave' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <path d="M4 24 Q 12 14 20 24 T 36 24" stroke="#7ccfdd" strokeWidth="5" fill="none" strokeLinecap="round" />
+                            </svg>
+                        )}
+                        {item.kind === 'flag' && (
+                            <svg viewBox="0 0 40 40" className="w-full h-full">
+                                <rect x="18" y="8" width="3" height="26" rx="1.5" fill="#b9a45e" />
+                                <path d="M21 9 L34 14 L21 19 Z" fill="#e8c65a" />
+                            </svg>
+                        )}
+                    </div>
+                ))}
 
                 {/* Level Nodes */}
                 {levelNodes.map((node, index) => {
                     const isUnlocked = gameState.totalStars >= node.unlocksAtStars;
                     const isCompleted = gameState.completedLevels.includes(node.id);
                     const isNext = isUnlocked && !isCompleted && (!gameState.completedLevels.includes(node.id + 1));
-                    
+
                     return (
-                        <div 
+                        <div
                             key={node.id}
                             id={`level-node-${node.id}`}
-                            className="absolute left-1/2 -translate-x-1/2 z-10 flex flex-col items-center"
-                            style={{ top: node.y, transform: `translate(calc(-50% + ${node.x}px), -50%)` }}
+                            className="absolute z-10 flex flex-col items-center"
+                            style={{ left: node.x, top: node.y, transform: 'translate(-50%, -50%)' }}
                         >
                             <button
                                 onClick={() => handleLevelClick(node, isUnlocked)}
                                 className={`
                                     relative w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black shadow-xl transition-all duration-300
-                                    ${isCompleted 
-                                        ? 'bg-green-500 text-white ring-4 ring-green-200 scale-90' 
-                                        : isUnlocked 
-                                            ? 'bg-apple-blue text-white ring-8 ring-blue-100 scale-100 hover:scale-110 animate-bounce-small' 
+                                    ${isCompleted
+                                        ? 'bg-green-500 text-white ring-4 ring-green-200 scale-90'
+                                        : isUnlocked
+                                            ? 'bg-apple-blue text-white ring-8 ring-blue-100 scale-100 hover:scale-110 animate-bounce-small'
                                             : 'bg-slate-200 text-slate-400 ring-4 ring-slate-100 scale-90 grayscale'}
                                 `}
                             >
-                                {isCompleted ? <Star className="fill-white w-10 h-10" /> : 
-                                 !isUnlocked ? <Lock className="w-8 h-8 opacity-50" /> : 
+                                {isCompleted ? <Star className="fill-white w-10 h-10" /> :
+                                 !isUnlocked ? <Lock className="w-8 h-8 opacity-50" /> :
                                  node.id}
-                                
+
                                 {isNext && (
                                     <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-20" />
                                 )}
@@ -307,20 +435,7 @@ export const LevelMap: React.FC<LevelMapProps> = ({ levels, gameState, onSelectL
                         </div>
                     );
                 })}
-
-                {/* Decoration: Start Flag */}
-                <div className="absolute left-1/2 top-[80px] -translate-x-1/2 z-0 opacity-50">
-                    <div className="flex flex-col items-center">
-                        <div className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-2">Start</div>
-                        <div className="w-1 h-8 bg-slate-300" />
-                    </div>
-                </div>
-
-                 <div className="absolute top-[300px] left-[10%] opacity-20 pointer-events-none"><ShapeRender type="circle" className="w-12 h-12 text-white" /></div>
-                 <div className="absolute top-[600px] right-[10%] opacity-20 pointer-events-none"><ShapeRender type="star" className="w-16 h-16 text-yellow-400" /></div>
-                 <div className="absolute top-[900px] left-[20%] opacity-20 pointer-events-none"><ShapeRender type="triangle" className="w-14 h-14 text-blue-400" /></div>
             </div>
-            
             <div className="h-32" />
         </div>
 

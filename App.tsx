@@ -43,6 +43,17 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
   }, [gameState]);
 
+  // Deep link for testing/classroom use: ?niva=12 opens level 12 directly
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get('niva');
+    const n = raw ? parseInt(raw, 10) : NaN;
+    if (LEVELS.some(l => l.id === n)) {
+      setGameState(prev => ({ ...prev, currentLevelId: n }));
+      setShowIntro(false);
+      localStorage.setItem(INTRO_SEEN_KEY, 'true');
+    }
+  }, []);
+
   // Check if intro has been seen
   useEffect(() => {
     const seen = localStorage.getItem(INTRO_SEEN_KEY);

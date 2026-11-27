@@ -6,6 +6,11 @@ import { RotateCcw, Home, Lightbulb, Clock, AlertTriangle, Sparkles, Star } from
 import { playSnap, playClick, playPickUp, playDragMove, playBackgroundMusic } from '../audio';
 import { report } from '../skolappar';
 
+// Light tiles need a dark silhouette, otherwise the shape disappears into the tile.
+const LIGHT_TILES = ['bg-white', 'bg-slate-200', 'bg-gray-300', 'bg-sky-200', 'bg-green-300', 'bg-green-400', 'bg-yellow-400'];
+const isLightTile = (color: string) => LIGHT_TILES.includes(color);
+const toTextTone = (color: string) => color.replace(/^bg-/, 'text-');
+
 interface GameBoardProps {
   level: LevelData;
   onComplete: (bonusStars: number) => void;
@@ -19,6 +24,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
   
   // Which pieces have been successfully placed
   const [lockedPieceIds, setLockedPieceIds] = useState<string[]>([]);
+  // Which slot each placed piece sits in. Tracking the slot (not the pixel position)
+  // keeps stacked picture levels solvable: a body and a beak may share a spot.
+  const [lockedTargets, setLockedTargets] = useState<Record<string, string>>({});
   
   // Dragging state
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -53,13 +61,30 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
 
   // Initialize level
   useEffect(() => {
+    // Keep pieces clear of the top toolbar and the bottom hint bar: a piece that
+    // starts underneath a button can never be grabbed.
+    const rect = containerRef.current?.getBoundingClientRect();
+    const boxW = rect?.width || window.innerWidth;
+    const boxH = rect?.height || window.innerHeight;
+    const pieceR = Math.min(boxW, boxH) * 0.09; // half of 18vh piece
+    const TOP_SAFE = 84;    // toolbar height (p-4 + 48px button + slack)
+    const BOTTOM_SAFE = 56; // hint bar
+    const clampPos = (pos: { x: number; y: number }) => {
+      const px = (pos.x / 100) * boxW;
+      const py = (pos.y / 100) * boxH;
+      const cx = Math.min(Math.max(px, pieceR + 4), boxW - pieceR - 4);
+      const cy = Math.min(Math.max(py, TOP_SAFE + pieceR * 0.55), boxH - BOTTOM_SAFE - pieceR * 0.55);
+      return { x: (cx / boxW) * 100, y: (cy / boxH) * 100 };
+    };
+
     // Deep copy to reset positions
     const initialPieces = level.shapes.map(s => ({
       ...s,
-      currentPos: { ...s.startPosition }
+      currentPos: clampPos(s.startPosition)
     }));
     setPieces(initialPieces);
     setLockedPieceIds([]);
+    setLockedTargets({});
     setHintId(null);
     setHintCooldown(false);
     setIsGameOver(false);
@@ -92,18 +117,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
       };
   }, [challengeMode, isGameOver, pieces.length, lockedPieceIds.length]);
 
-  // Check victory condition
   useEffect(() => {
-    if (pieces.length > 0 && lockedPieceIds.length === pieces.length) {
+    if (pieces.length > 0 && lockedPieceIds.length === pieces.length && !completedRef.current) {
+      completedRef.current = true;
       if (timerRef.current) clearInterval(timerRef.current);
       if (!roundReportedRef.current) {
         roundReportedRef.current = true;
         report('round_done', 100);
       }
-      if (completedRef.current) return;
-      completedRef.current = true;
       // Slight delay for satisfaction
-      setTimeout(() => {
+      const t = window.setTimeout(() => {
           // Bonus star if challenge mode active and not game over
           const bonus = challengeMode ? 1 : 0;
           onCompleteRef.current(bonus);
@@ -227,12 +250,26 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
 
   const handleReset = () => {
       playClick();
+      const rect = containerRef.current?.getBoundingClientRect();
+      const boxW = rect?.width || window.innerWidth;
+      const boxH = rect?.height || window.innerHeight;
+      const pieceR = Math.min(boxW, boxH) * 0.09;
+      const TOP_SAFE = 84;
+      const BOTTOM_SAFE = 56;
+      const clampPos = (pos: { x: number; y: number }) => {
+          const px = (pos.x / 100) * boxW;
+          const py = (pos.y / 100) * boxH;
+          const cx = Math.min(Math.max(px, pieceR + 4), boxW - pieceR - 4);
+          const cy = Math.min(Math.max(py, TOP_SAFE + pieceR * 0.55), boxH - BOTTOM_SAFE - pieceR * 0.55);
+          return { x: (cx / boxW) * 100, y: (cy / boxH) * 100 };
+      };
       const initialPieces = level.shapes.map(s => ({
           ...s,
-          currentPos: { ...s.startPosition }
+          currentPos: clampPos(s.startPosition)
       }));
       setPieces(initialPieces);
       setLockedPieceIds([]);
+      setLockedTargets({});
       setHintId(null);
       setIsGameOver(false);
       reportRoundStart();
@@ -274,7 +311,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
     setActiveDragId(id);
     
     // Capture pointer to handle fast movements outside element bounds
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try {
+        (e.target as Element).setPointerCapture(e.pointerId);
+    } catch (err) {
+        // ignore - capture is a nicety, not a requirement
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -328,14 +369,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
           
           if (!isVisualMatch) return false;
 
-          // 2. Target must not be occupied by another locked piece
-          // Check if any locked piece is currently sitting at this target's position
-          const isOccupied = pieces.some(p => 
-              lockedPieceIds.includes(p.id) && 
-              p.id !== piece.id && // Don't count self
-              // Check if p is snapped to this target
-              Math.abs((p.currentPos?.x || 0) - targetShape.targetPosition.x) < 0.1 && 
-              Math.abs((p.currentPos?.y || 0) - targetShape.targetPosition.y) < 0.1
+          // 2. Target must not be taken by another piece
+          const isOccupied = Object.entries(lockedTargets).some(
+              ([pieceId, targetId]) => targetId === targetShape.id && pieceId !== piece.id
           );
 
           return !isOccupied;
@@ -360,6 +396,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
         // Snap!
         playSnap(); // AUDIO FEEDBACK
         setLockedPieceIds(prev => [...prev, piece.id]);
+        setLockedTargets(prev => ({ ...prev, [piece.id]: closestTarget.id }));
         setPieces(prev => prev.map(p => {
           if (p.id !== activeDragId) return p;
           return { ...p, currentPos: { ...closestTarget.targetPosition } }; // Snap exact
@@ -478,10 +515,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
                 transform: `translate(-50%, -50%) rotate(${shape.rotation || 0}deg) scale(${shape.scale || 1})`,
                 }}
             >
-                <div className={`w-full h-full opacity-20 bg-black/10 rounded-xl transition-all duration-500 ${vTheme.isDark ? 'text-white' : 'text-slate-900'} ${isHinting ? 'ring-4 ring-yellow-400 ring-offset-4 ring-offset-slate-50 bg-yellow-400/30' : ''}`} style={{
-                    boxShadow: 'inset 2px 2px 6px rgba(0,0,0,0.2)'
-                }}>
-                    <ShapeRender type={shape.type} className={vTheme.isDark ? "text-white/40" : "text-slate-800/40"} />
+                <div
+                    className={`w-full h-full rounded-2xl border-[3px] border-dashed transition-all duration-300 flex items-center justify-center ${
+                        isHinting
+                            ? 'border-yellow-500 bg-yellow-100 ring-4 ring-yellow-300'
+                            : 'border-slate-500/60 bg-white/85'
+                    }`}
+                    style={{ boxShadow: 'inset 0 2px 8px rgba(15,23,42,0.10)' }}
+                >
+                    <div className="w-[78%] h-[78%]">
+                        <ShapeRender
+                            type={shape.type}
+                            className={isLightTile(shape.color) ? 'text-slate-600' : toTextTone(shape.color)}
+                            style={{ opacity: 0.6 }}
+                        />
+                    </div>
                 </div>
             </div>
             );
@@ -502,12 +550,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
                                      (targetShape.scale || 1) === (shape.scale || 1) &&
                                      (targetShape.rotation || 0) === (shape.rotation || 0);
                      if (!isMatch) return false;
-                     const isOccupied = pieces.some(p => 
-                        lockedPieceIds.includes(p.id) && 
-                        p.id !== shape.id && 
-                        Math.abs((p.currentPos?.x || 0) - targetShape.targetPosition.x) < 0.1 && 
-                        Math.abs((p.currentPos?.y || 0) - targetShape.targetPosition.y) < 0.1
-                    );
+                     const isOccupied = Object.entries(lockedTargets).some(
+                        ([pieceId, targetId]) => targetId === targetShape.id && pieceId !== shape.id
+                     );
                     if (isOccupied) return false;
                     const dist = Math.sqrt(
                         Math.pow(pos.x - targetShape.targetPosition.x, 2) + 
@@ -534,7 +579,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
                         pointerEvents: isGameOver ? 'none' : 'auto'
                     }}
                 >
-                    <div className={`w-full h-full rounded-xl transition-all duration-200 ${shape.color} ${isLocked ? 'animate-lock-in' : ''} ${isNearTarget ? 'brightness-110 ring-4 ring-white/60' : ''} ${isHinting ? 'ring-4 ring-yellow-400 ring-offset-2 animate-bounce' : ''}`}>
+                    <div className={`w-full h-full rounded-xl ring-1 ring-black/10 transition-all duration-200 ${shape.color} ${isLocked ? 'animate-lock-in' : ''} ${isNearTarget ? 'brightness-110 ring-4 ring-white/60' : ''} ${isHinting ? 'ring-4 ring-yellow-400 ring-offset-2 animate-bounce' : ''}`}>
                          {isLocked && (
                              <div className="absolute inset-0 flex items-center justify-center text-white/50">
                                  <svg className="w-1/2 h-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -560,7 +605,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ level, onComplete, onExit,
                             </div>
                         )}
 
-                         <ShapeRender type={shape.type} className="text-white/90 drop-shadow-sm" />
+                         <ShapeRender type={shape.type} className={isLightTile(shape.color) ? "text-slate-700/85 drop-shadow-sm" : "text-white drop-shadow-sm"} />
                     </div>
                 </div>
             );
